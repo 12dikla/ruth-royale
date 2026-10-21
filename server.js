@@ -37,8 +37,8 @@ function newMatch(r) {
 const crowns = m => [0, 1].map(o => m.tw.filter(t => t.o !== o && t.hp <= 0).length);
 function finish(r, winner, why) {
   if (r.phase !== 'playing') return;
-  r.phase = 'ended';
-  r.result = { winner, why, names: r.players.map(p => p.name), crowns: crowns(r.m) };
+  r.phase = 'ended'; if (winner >= 0) r.wins[winner]++;
+  r.result = { winner, why, names: r.players.map(p => p.name), crowns: crowns(r.m), wins: r.wins };
   r.players.forEach(p => { p.ready = false; p.rematch = false; });
   io.to(r.code).emit('end', r.result); lobby(r);
 }
@@ -78,12 +78,14 @@ function tick(r) {
   m.u = m.u.filter(u => u.hp > 0);
   const kd = m.tw.filter(t => t.k === 'K' && t.hp <= 0).map(t => t.o);
   if (kd.length) return finish(r, kd.length === 2 ? -1 : 1 - kd[0], 'king');
+  if (m.ot) { const c = crowns(m); if (c[0] !== c[1]) return finish(r, c[0] > c[1] ? 0 : 1, 'sudden'); }
   if (m.t <= 0) {
     const c = crowns(m); if (c[0] !== c[1]) return finish(r, c[0] > c[1] ? 0 : 1, 'time');
+    if (!m.ot) { m.ot = true; m.t = 60; m.msg = '⚡ OVERTIME! First tower wins!'; m.msgT = 4; return; }
     const h = [0, 1].map(o => m.tw.filter(t => t.o === o).reduce((a, t) => a + Math.max(0, t.hp), 0));
     return finish(r, h[0] === h[1] ? -1 : h[0] > h[1] ? 0 : 1, 'time');
   }
-  const base = { t: Math.ceil(m.t), e: m.e.map(x => +x.toFixed(1)), s: m.sugar.map(x => x > 0), tw: m.tw.map(t => [t.o, t.k, Math.max(0, Math.ceil(t.hp))]), u: m.u.map(u => [u.id, u.o, u.t, +u.x.toFixed(1), +u.y.toFixed(1), Math.ceil(u.hp)]), b: m.balloon && [m.balloon.id, m.balloon.x, m.balloon.y], msg: m.msg };
+  const base = { ot: !!m.ot, t: Math.ceil(m.t), e: m.e.map(x => +x.toFixed(1)), s: m.sugar.map(x => x > 0), tw: m.tw.map(t => [t.o, t.k, Math.max(0, Math.ceil(t.hp))]), u: m.u.map(u => [u.id, u.o, u.t, +u.x.toFixed(1), +u.y.toFixed(1), Math.ceil(u.hp)]), b: m.balloon && [m.balloon.id, m.balloon.x, m.balloon.y], msg: m.msg };
   r.players.forEach(p => p.sid && io.to(p.sid).emit('state', { ...base, hand: p.hand, next: p.q[0] }));
 }
 setInterval(() => { for (const [k, r] of rooms) { if (r.phase === 'playing') tick(r); if (!r.players.some(p => p.connected) && Date.now() - r.last > 600000) rooms.delete(k); } }, TICK * 1000);
@@ -93,7 +95,7 @@ io.on('connection', sock => {
   const me = () => room && room.players[idx];
   const attach = (r, i, p) => { room = r; idx = i; p.sid = sock.id; p.connected = true; clearTimeout(p.forfeit); r.last = Date.now(); sock.join(r.code); sock.emit('joined', { code: r.code, you: i }); lobby(r); if (r.phase === 'playing') sock.emit('start', { names: r.players.map(q => q.name) }); };
   sock.on('create', ({ name, pid }) => {
-    const r = { code: code(), phase: 'lobby', players: [], m: null, result: null, last: Date.now() };
+    const r = { code: code(), phase: 'lobby', players: [], wins: [0, 0], m: null, result: null, last: Date.now() };
     rooms.set(r.code, r); const p = { pid, name: cleanName(name), ready: false, connected: true, rematch: false }; r.players.push(p); attach(r, 0, p);
   });
   sock.on('join', ({ code: c, name, pid }) => {
@@ -131,6 +133,7 @@ io.on('connection', sock => {
     if (!room || room.phase !== 'playing') return; const m = room.m;
     if (m.balloon && m.balloon.id === id) { m.balloon = null; m.nextBalloon = m.t - 25; m.e[idx] = 10; m.msg = `🎈 ${me().name} popped the Golden Balloon!`; m.msgT = 3; }
   });
+  sock.on('emote', ({ i }) => { if (!room || !me() || !Number.isInteger(i) || i < 0 || i > 4) return; const p = me(); if (Date.now() - (p.lastEmote || 0) < 1200) return; p.lastEmote = Date.now(); io.to(room.code).emit('emote', { from: idx, i }); });
   sock.on('rematch', () => { if (room && room.phase === 'ended') { me().rematch = true; lobby(room); if (room.players.length === 2 && room.players.every(p => p.rematch)) newMatch(room); } });
   const leave = hard => {
     if (!room) return; const r = room, p = me(), i = idx; room = null; idx = -1; sock.leave(r.code);
