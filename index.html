@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ruth Royale 🎂</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:#2b0a4d;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.scr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;padding-top:max(20px,env(safe-area-inset-top));padding-bottom:max(20px,env(safe-area-inset-bottom));background:linear-gradient(160deg,#ff5fa2,#7b2ff7 60%,#2b0a4d);text-align:center}
+.scr.on{display:flex}
+h1{margin:0;font-size:38px;text-shadow:0 3px 0 #0004}
+input{width:100%;max-width:320px;padding:14px;font-size:18px;border-radius:14px;border:0;text-align:center;user-select:text;-webkit-user-select:text}
+button{font-size:18px;font-weight:800;padding:14px 20px;border:0;border-radius:16px;color:#fff;background:#ff3d8b;box-shadow:0 4px 0 #0005;width:100%;max-width:320px}
+button.alt{background:#2f9bff}button.g{background:#27c46b}button.d{background:#555}button:disabled{opacity:.4}
+button:active{transform:translateY(2px)}
+.code{font-size:56px;font-weight:900;letter-spacing:8px;background:#0003;padding:6px 18px;border-radius:16px}
+.pl{width:100%;max-width:320px;background:#0003;border-radius:14px;padding:12px;font-size:18px;display:flex;justify-content:space-between}
+#err{color:#ffe066;min-height:22px;font-weight:700}
+#game{padding:0;gap:0;justify-content:flex-start;background:#1a0a33}
+#hud{width:100%;display:flex;justify-content:space-between;padding:6px 10px;padding-top:max(6px,env(safe-area-inset-top));font-weight:800;font-size:15px}
+#cv{flex:1;min-height:0;width:100%;touch-action:none}
+#msg{position:absolute;top:56px;width:100%;text-align:center;font-weight:800;font-size:18px;text-shadow:0 2px 4px #000;pointer-events:none}
+#bar{width:100%;padding:6px;padding-bottom:max(6px,env(safe-area-inset-bottom));background:#0006}
+#en{height:14px;background:#0008;border-radius:8px;overflow:hidden;margin-bottom:6px;position:relative}
+#enf{height:100%;background:linear-gradient(90deg,#c84bff,#ff5fa2);width:50%}
+#enl{position:absolute;inset:0;font-size:11px;line-height:14px;font-weight:800}
+.row{display:flex;gap:5px;margin-bottom:5px}
+.cd{flex:1;padding:6px 0;font-size:11px;border-radius:12px;background:#4b2a80;box-shadow:0 3px 0 #0006;text-align:center;font-weight:800;min-height:56px;border:2px solid transparent}
+.cd b{display:block;font-size:24px}.cd.sel{border-color:#ffe066;background:#7b2ff7}.cd.no{opacity:.45}
+.cd.sp{background:#b3398a}
+#end{z-index:5}
+#cake{font-size:110px;animation:b 1s infinite alternate}@keyframes b{to{transform:scale(1.15) rotate(5deg)}}
+#fx{position:absolute;inset:0;pointer-events:none;z-index:9}
+</style></head><body>
+<div id="home" class="scr on">
+ <h1>🎂 Ruth Royale 🎈</h1><div>A birthday battle for two players</div>
+ <input id="nm" maxlength="14" placeholder="Your name" autocomplete="off">
+ <button id="cr">🎉 CREATE BATTLE ROOM</button>
+ <input id="cd" maxlength="4" placeholder="ROOM CODE" autocapitalize="characters" autocomplete="off">
+ <button id="jn" class="alt">JOIN ROOM</button><div id="err"></div>
+</div>
+<div id="lobby" class="scr">
+ <div>Room code</div><div class="code" id="lc">----</div>
+ <button id="cp" class="alt">📋 Copy Invitation Link</button>
+ <button id="wa" class="g">💬 Share via WhatsApp</button>
+ <div class="pl"><span id="p0">Player 1</span><span id="s0"></span></div>
+ <div class="pl"><span id="p1">Player 2</span><span id="s1"></span></div>
+ <button id="rd">✅ I'M READY</button>
+ <button id="st" class="g">⚔️ START BATTLE</button>
+ <button id="lv" class="d">Leave Room</button><div id="lerr" style="color:#ffe066"></div>
+</div>
+<div id="game" class="scr">
+ <div id="hud"><span id="h0"></span><span id="ht"></span><span id="h1"></span></div>
+ <canvas id="cv"></canvas><div id="msg"></div>
+ <div id="bar"><div id="en"><div id="enf"></div><div id="enl"></div></div>
+  <div class="row" id="units"></div><div class="row" id="spells"></div></div>
+</div>
+<div id="end" class="scr"><canvas id="fx"></canvas><div id="cake">🎂</div><h1 id="et"></h1><div id="es" style="font-size:20px"></div>
+ <button id="rm">🔁 REMATCH</button><button id="lv2" class="d">Leave</button></div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const W=100,H=160;
+const U={cupcake:['🧁','Cupcake Knight',2],dragon:['🐉','Balloon Dragon',4],cannon:['🎊','Confetti Cannon',3],trap:['🎁','Gift Box Trap',2],queen:['👑','Party Queen',5],cake:['🍰','Angry Cake',7]};
+const S={storm:['🌪️','Confetti Storm',4],sugar:['🍭','Sugar Rush',3],mystery:['🎁','Mystery Present',2]};
+let pid;try{pid=sessionStorage.pid||(sessionStorage.pid=Math.random().toString(36).slice(2)+Date.now())}catch(e){pid=Math.random().toString(36).slice(2)}
+const sock=io();let you=0,roomCode='',names=['',''],st=null,sel='cupcake',room=null;
+const show=id=>{document.querySelectorAll('.scr').forEach(s=>s.classList.toggle('on',s.id===id))};
+const q=new URLSearchParams(location.search).get('room');if(q)$('cd').value=q.toUpperCase();
+try{$('nm').value=localStorage.nm||''}catch(e){}
+const nm=()=>{const n=$('nm').value.trim()||'Player';try{localStorage.nm=n}catch(e){}return n};
+$('cr').onclick=()=>sock.emit('create',{name:nm(),pid});
+$('jn').onclick=()=>sock.emit('join',{code:$('cd').value,name:nm(),pid});
+const link=()=>location.origin+'/?room='+roomCode;
+$('cp').onclick=async()=>{try{await navigator.clipboard.writeText(link());$('cp').textContent='✅ Copied!'}catch(e){prompt('Copy this link',link())}};
+$('wa').onclick=()=>{const t='🎂 Join my Ruth Royale birthday battle! '+link();navigator.share?navigator.share({text:t}).catch(()=>{}):open('https://wa.me/?text='+encodeURIComponent(t))};
+$('rd').onclick=()=>sock.emit('ready');$('st').onclick=()=>sock.emit('start');
+$('lv').onclick=$('lv2').onclick=()=>sock.emit('leave');
+$('rm').onclick=()=>{sock.emit('rematch');$('rm').textContent='Waiting for opponent…'};
+sock.on('err',m=>{$('err').textContent=m});
+sock.on('joined',d=>{you=d.you;roomCode=d.code;$('err').textContent='';history.replaceState(null,'','/?room='+d.code);show('lobby')});
+sock.on('left',m=>{show('home');history.replaceState(null,'','/');$('err').textContent=typeof m==='string'?m:''});
+sock.on('connect',()=>{if(roomCode)sock.emit('join',{code:roomCode,name:nm(),pid})});
+sock.on('room',r=>{room=r;$('lc').textContent=r.code;
+ [0,1].forEach(i=>{const p=r.players[i];$('p'+i).textContent=p?(p.name+(i===you?' (you)':'')):'Player '+(i+1);
+  $('s'+i).textContent=!p?'⏳ waiting…':!p.connected?'📴 offline':p.ready?'✅ ready':'🟡 not ready'});
+ const me=r.players[you];$('rd').textContent=me&&me.ready?'↩️ NOT READY':"✅ I'M READY";
+ $('st').style.display=you===0?'':'none';$('st').disabled=!(r.players.length===2&&r.players.every(p=>p.ready));
+ if(r.phase==='lobby'&&$('game').classList.contains('on')||r.phase==='lobby'&&$('end').classList.contains('on'))show('lobby');
+ if(r.phase==='playing'&&!r.players.every(p=>p.connected))$('msg').textContent='Opponent disconnected… waiting 20s';});
+sock.on('start',d=>{names=d.names;st=null;$('end').querySelector('#fx').getContext('2d').clearRect(0,0,9999,9999);$('rm').textContent='🔁 REMATCH';show('game');fit()});
+sock.on('state',s=>{st=s});
+sock.on('rej',m=>{flash(m)});
+function flash(m){$('msg').textContent=m;clearTimeout(flash.t);flash.t=setTimeout(()=>{if(!st||!st.msg)$('msg').textContent=''},1200)}
+// ----- cards -----
+function build(){
+ $('units').innerHTML='';$('spells').innerHTML='';
+ for(const k in U){const b=document.createElement('div');b.className='cd';b.id='u_'+k;b.innerHTML=`<b>${U[k][0]}</b>${U[k][1]}<br>⚡${U[k][2]}`;b.onclick=()=>{sel=k;upd()};$('units').appendChild(b)}
+ for(const k in S){const b=document.createElement('div');b.className='cd sp';b.id='s_'+k;b.innerHTML=`<b>${S[k][0]}</b>${S[k][1]}<br>⚡${S[k][2]}`;b.onclick=()=>sock.emit('spell',{type:k});$('spells').appendChild(b)}
+}build();
+function upd(){const e=st?st.e[you]:0;
+ for(const k in U){$('u_'+k).classList.toggle('sel',k===sel);$('u_'+k).classList.toggle('no',e<U[k][2])}
+ for(const k in S)$('s_'+k).classList.toggle('no',e<S[k][2])}
+// ----- rendering (own side is always at the bottom) -----
+const cv=$('cv'),cx=cv.getContext('2d');let sc=1,ox=0,oy=0;
+function fit(){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;sc=Math.min(cv.width/W,cv.height/H);ox=(cv.width-W*sc)/2;oy=(cv.height-H*sc)/2}
+addEventListener('resize',fit);
+const P=(x,y)=>{if(you===1){x=W-x;y=H-y}return[ox+x*sc,oy+(H-y)*sc]}; // world -> screen
+const inv=(px,py)=>{let x=(px-ox)/sc,y=H-(py-oy)/sc;if(you===1){x=W-x;y=H-y}return[x,y]};
+function em(ch,x,y,s){cx.font=s*sc+'px serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(ch,...P(x,y))}
+function hp(x,y,v,max,own){const[a,b]=P(x,y);const w=9*sc;cx.fillStyle='#0008';cx.fillRect(a-w/2,b-7*sc,w,1.6*sc);cx.fillStyle=own?'#3dff8b':'#ff4d4d';cx.fillRect(a-w/2,b-7*sc,w*Math.max(0,v/max),1.6*sc)}
+const MAXHP={cupcake:60,dragon:80,cannon:50,trap:10,queen:150,cake:300};
+function draw(){requestAnimationFrame(draw);if(!$('game').classList.contains('on'))return;
+ cx.clearRect(0,0,cv.width,cv.height);
+ const g=cx.createLinearGradient(0,oy,0,oy+H*sc);g.addColorStop(0,'#5b2a9c');g.addColorStop(1,'#ff8fc4');cx.fillStyle=g;cx.fillRect(ox,oy,W*sc,H*sc);
+ cx.fillStyle='#fff6';const[,my]=P(0,H/2);cx.fillRect(ox,my-sc,W*sc,2*sc);
+ cx.fillStyle='#3dff8b22';cx.fillRect(ox,my,W*sc,oy+H*sc-my);
+ if(!st)return;
+ for(const o of[0,1]){const y=o===0?4:H-4;em('🏰',50,y,16);const[a,b]=P(50,y);const w=40*sc;cx.fillStyle='#0008';cx.fillRect(a-w/2,b+(o===you?9:-12)*sc,w,3*sc);cx.fillStyle=o===you?'#3dff8b':'#ff4d4d';cx.fillRect(a-w/2,b+(o===you?9:-12)*sc,w*Math.max(0,st.c[o]/500),3*sc)}
+ for(const[id,o,t,x,y,h]of st.u){const own=o===you;const[a,b]=P(x,y);cx.beginPath();cx.arc(a,b,5.5*sc,0,7);cx.fillStyle=own?'#3dff8b66':'#ff4d4d66';cx.fill();cx.lineWidth=sc*.8;cx.strokeStyle=own?'#3dff8b':'#ff4d4d';cx.stroke();em(U[t][0],x,y,8);hp(x,y,h,MAXHP[t],own)}
+ if(st.b){const[,bx,by]=st.b;em('🎈',bx,by+Math.sin(Date.now()/200)*2,14);cx.beginPath();const[a,b]=P(bx,by);cx.arc(a,b,9*sc,0,7);cx.strokeStyle='gold';cx.lineWidth=sc;cx.stroke()}
+ $('h0').textContent='🟢 '+names[you]+' '+st.c[you];$('h1').textContent=names[1-you]+' '+st.c[1-you]+' 🔴';
+ $('ht').textContent='⏱ '+Math.floor(st.t/60)+':'+String(st.t%60).padStart(2,'0');
+ $('enf').style.width=st.e[you]*10+'%';$('enl').textContent='⚡ '+Math.floor(st.e[you])+(st.s[you]?'  🍭 SUGAR RUSH':'');
+ if(st.msg)$('msg').textContent=st.msg;else if($('msg').textContent.startsWith('Opp')===false&&!flash.t)$('msg').textContent='';
+ upd()}
+draw();
+cv.addEventListener('pointerdown',e=>{e.preventDefault();if(!st)return;const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;const[x,y]=inv((e.clientX-r.left)*d,(e.clientY-r.top)*d);
+ if(st.b&&Math.hypot(x-st.b[1],y-st.b[2])<12)return sock.emit('balloon',{id:st.b[0]});
+ sock.emit('deploy',{type:sel,x,y})});
+['gesturestart','gesturechange','contextmenu'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault()));
+document.addEventListener('touchmove',e=>{if($('game').classList.contains('on'))e.preventDefault()},{passive:false});
+// ----- ending -----
+let confetti=[];
+sock.on('end',r=>{const w=r.winner;st=null;const win=w===you,draw=w===-1;
+ $('cake').textContent=draw?'🤝':win?'🎂':'🥲';
+ $('et').textContent=draw?"IT'S A TIE! 🎈":win?'HAPPY BIRTHDAY, RUTH! 🎉':'Oh no, you got frosted! 🧁';
+ $('es').textContent=draw?'Nobody gets the cake… rematch!':win?`🏆 ${r.names[w]} wins the cake! 🎆🎈 Fireworks, balloons & confetti for ${r.names[w]}!`:`${r.names[w]} stole the cake 🍰 — ${r.why==='forfeit'?'(opponent left)':"you'll get 'em next time!"}`;
+ $('rm').textContent='🔁 REMATCH';show('end');
+ if(!draw&&win)party();else if(!draw){/* friendly defeat: gentle falling cupcakes */party(['🧁','😅','🍰'])}});
+function party(emojis){const c=$('fx'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;
+ const cols=['#ff3d8b','#ffe066','#2f9bff','#3dff8b','#fff'];
+ confetti=Array.from({length:120},()=>({x:Math.random()*c.width,y:-Math.random()*c.height,v:2+Math.random()*4,c:cols[Math.random()*5|0],e:emojis?emojis[Math.random()*emojis.length|0]:Math.random()<.15?'🎈':null}));
+ const bursts=[];let f=0;(function loop(){if(!$('end').classList.contains('on'))return;x.clearRect(0,0,c.width,c.height);
+  if(!emojis&&f%25===0){const bx=Math.random()*c.width,by=c.height*(.15+Math.random()*.4);for(let i=0;i<30;i++){const a=i/30*6.28;bursts.push({x:bx,y:by,vx:Math.cos(a)*4,vy:Math.sin(a)*4,l:40,c:cols[i%5]})}}
+  for(const b of bursts){b.x+=b.vx;b.y+=b.vy;b.vy+=.08;b.l--;x.fillStyle=b.c;x.fillRect(b.x,b.y,3,3)}
+  for(const p of confetti){p.y+=p.v;if(p.y>c.height){p.y=-10;p.x=Math.random()*c.width}if(p.e){x.font='26px serif';x.fillText(p.e,p.x,p.y)}else{x.fillStyle=p.c;x.fillRect(p.x,p.y,6,10)}}
+  f++;requestAnimationFrame(loop)})()}
+</script></body></html>
